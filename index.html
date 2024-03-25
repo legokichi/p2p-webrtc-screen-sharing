@@ -179,6 +179,7 @@
         peer.close();
         video.pause();
         video.srcObject = null;
+        document.body.removeChild(video);
     }
 
     document.addEventListener("DOMContentLoaded", (ev) => {
@@ -200,5 +201,6 @@
         document.body.appendChild(button2);
     });
 </script>
+
 <body>
 </body>
