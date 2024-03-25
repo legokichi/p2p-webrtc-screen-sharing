@@ -1,0 +1,204 @@
+<script>
+    async function captureDesktop() {
+        const localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        console.log("make Offer");
+        const peer = new RTCPeerConnection({ iceServers: [] });
+        peer.onsignalingstatechange = () => {
+            console.log("onsignalingstatechange", peer.signalingState);
+        };
+        peer.onicecandidateerror = (evt) => {
+            console.error("onicecandidateerror", evt);
+        };
+        peer.onsignalingstatechange = () => {
+            console.log("onsignalingstatechange", peer.signalingState);
+        };
+        peer.oniceconnectionstatechange = () => {
+            console.log("oniceconnectionstatechange", peer.iceConnectionState);
+        };
+        peer.onicegatheringstatechange = () => {
+            console.log("onicegatheringstatechange", peer.iceGatheringState);
+        };
+        peer.onconnectionstatechange = () => {
+            console.log("onconnectionstatechange", peer.connectionState);
+        };
+        console.log("Adding local stream...");
+        peer.addStream(localStream);
+        const sdp = await peer.createOffer();
+        console.log("createOffer() succsess in promise");
+        await peer.setLocalDescription(sdp);
+        console.log("setLocalDescription() succsess in promise");
+        const localSdpText = await new Promise((resolve) => {
+            peer.onicecandidate = (evt) => {
+                if (evt.candidate != null) {
+                    console.log("ice event", evt.candidate);
+                    // Trickle ICE の場合は、ICE candidateを相手に送る
+                    // Vanilla ICE の場合には、何もしない
+                } else {
+                    console.log("empty ice event");
+                    // Trickle ICE の場合は、何もしない
+                    // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
+                    console.log("---sending sdp ---");
+                    console.log(peer.localDescription.sdp);
+                    resolve(peer.localDescription.sdp);
+                }
+            };
+        });
+        const textarea = document.createElement("textarea");
+        textarea.value = localSdpText;
+        document.body.appendChild(textarea);
+        const textarea2 = document.createElement("textarea");
+        textarea2.value = "paste remote sdp here";
+        document.body.appendChild(textarea2);
+        const button = document.createElement("button");
+        button.appendChild(document.createTextNode("Receive Offer"));
+        document.body.appendChild(button);
+        await new Promise((resolve) => { button.onclick = resolve; });
+        const remoteSdpText = textarea2.value;
+        console.log("Received answer text...");
+        console.log(remoteSdpText);
+        document.body.removeChild(button);
+        document.body.removeChild(textarea);
+        document.body.removeChild(textarea2);
+        const answerSdp = new RTCSessionDescription({
+            type: "answer",
+            sdp: remoteSdpText,
+        });
+        await peer.setRemoteDescription(answerSdp);
+        console.log("setRemoteDescription(answer) succsess in promise");
+        await new Promise((resolve) => {
+            peer.oniceconnectionstatechange = () => {
+                console.log("oniceconnectionstatechange", peer.iceConnectionState);
+                if (peer.iceConnectionState === 'disconnected') {
+                    resolve();
+                }
+            };
+        });
+        console.log('Hang up.');
+        peer.close();
+    }
+
+
+    async function receiveDesktop() {
+        const textarea = document.createElement("textarea");
+        textarea.value = "paste remote sdp here";
+        document.body.appendChild(textarea);
+        const button = document.createElement("button");
+        button.appendChild(document.createTextNode("Receive Offer"));
+        document.body.appendChild(button);
+        await new Promise((resolve) => { button.onclick = resolve; });
+        const remoteSdpText = textarea.value;
+        console.log("Received offer text...");
+        console.log(remoteSdpText);
+        document.body.removeChild(textarea);
+        document.body.removeChild(button);
+        const offerSdp = new RTCSessionDescription({
+            type: "offer",
+            sdp: remoteSdpText,
+        });
+        const peer = new RTCPeerConnection({ iceServers: [] });
+        peer.onsignalingstatechange = () => {
+            console.log("onsignalingstatechange", peer.signalingState);
+        };
+        peer.onicecandidateerror = (evt) => {
+            console.error("onicecandidateerror", evt);
+        };
+        peer.oniceconnectionstatechange = () => {
+            console.log("oniceconnectionstatechange", peer.iceConnectionState);
+        };
+        peer.onicegatheringstatechange = () => {
+            console.log("onicegatheringstatechange", peer.iceGatheringState);
+        };
+        peer.onconnectionstatechange = () => {
+            console.log("onconnectionstatechange", peer.connectionState);
+        };
+        const video = document.createElement("video");
+        peer.ontrack = (event) => {
+            console.log("ontrack", event);
+            const remoteStream = event.streams[0];
+            video.muted = true;
+            video.volume = 0;
+            video.autoplay = true;
+            video.playsinline = true;
+            video.controls = true;
+            video.srcObject = remoteStream;
+        };
+        peer.onremovestream = (event) => {
+            console.log("onremovestream", event);
+            video.pause();
+            video.srcObject = null;
+        };
+        await peer.setRemoteDescription(offerSdp);
+        console.log("setRemoteDescription(offer) succsess in promise");
+        console.log("sending Answer. Creating remote session description...");
+        const sdp2 = await peer.createAnswer();
+        console.log("createAnswer() succsess in promise");
+        await peer.setLocalDescription(sdp2);
+        console.log("setLocalDescription() succsess in promise");
+        // -- Trickle ICE の場合は、初期SDPを相手に送る -- 
+        // -- Vanilla ICE の場合には、まだSDPは送らない --
+        //sendSdp(peerConnection.localDescription);
+        const localSdpText = await new Promise((resolve) => {
+            peer.onicecandidate = function (evt) {
+                if (evt.candidate != null) {
+                    console.log("ice event", evt.candidate);
+                    // Trickle ICE の場合は、ICE candidateを相手に送る
+                    // Vanilla ICE の場合には、何もしない
+                } else {
+                    console.log("empty ice event");
+                    // Trickle ICE の場合は、何もしない
+                    // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
+                    console.log("---sending sdp ---");
+                    console.log(peer.localDescription.sdp);
+                    resolve(peer.localDescription.sdp);
+                }
+            };
+        });
+        const textarea2 = document.createElement("textarea");
+        textarea2.value = localSdpText;
+        document.body.appendChild(textarea2);
+        await new Promise((resolve) => {
+            peer.oniceconnectionstatechange = () => {
+                console.log("oniceconnectionstatechange", peer.iceConnectionState);
+                if (peer.iceConnectionState === "connected") {
+                    resolve();
+                }
+            };
+        });
+        document.body.removeChild(textarea2);
+        document.body.appendChild(video);
+        video.play();
+        await new Promise((resolve) => {
+            peer.oniceconnectionstatechange = () => {
+                console.log("oniceconnectionstatechange", peer.iceConnectionState);
+                if (peer.iceConnectionState === 'disconnected') {
+                    resolve();
+                }
+            };
+        });
+        console.log('Hang up.');
+        peer.close();
+        video.pause();
+        video.srcObject = null;
+    }
+
+    document.addEventListener("DOMContentLoaded", (ev) => {
+        const button1 = document.createElement("button");
+        const button2 = document.createElement("button");
+        button1.appendChild(document.createTextNode("captureDesktop"));
+        button2.appendChild(document.createTextNode("receiveDesktop"));
+        button1.onclick = () => {
+            document.body.removeChild(button1);
+            document.body.removeChild(button2);
+            captureDesktop();
+        };
+        button2.onclick = () => {
+            document.body.removeChild(button1);
+            document.body.removeChild(button2);
+            receiveDesktop();
+        };
+        document.body.appendChild(button1);
+        document.body.appendChild(button2);
+    });
+</script>
+<body>
+</body>
