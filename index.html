@@ -1,7 +1,12 @@
 <script>
     "use strict";
     async function captureDesktop() {
-        const localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const localStream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+                frameRate: 15,
+                displaySurface: "window",
+            },
+        });
         consolelog("make Offer");
         const peer = new RTCPeerConnection({ iceServers: [] });
         peer.onsignalingstatechange = () => {
