@@ -1,5 +1,57 @@
 <script>
     "use strict";
+    function addEventListeners(peer) {
+        peer.addEventListener("connectionstatechange", (_ev) => {
+            consolelog("onconnectionstatechange", peer.connectionState);
+        });
+        peer.addEventListener("icecandidate", (ev) => {
+            consolelog("onicecandidate", JSON.stringify(ev.candidate, null, 2));
+        });
+        peer.addEventListener("icecandidateerror", (ev) => {
+            consolelog("onicecandidateerror", JSON.stringify(ev, null, 2));
+        });
+        peer.addEventListener("iceconnectionstatechange", (_ev) => {
+            consolelog("oniceconnectionstatechange", peer.iceConnectionState);
+        });
+        peer.addEventListener("icegatheringstatechange", (_ev) => {
+            consolelog("onicegatheringstatechange", peer.iceGatheringState);
+        });
+        peer.addEventListener("negotiationneeded", (_ev) => {
+            consolelog("onnegotiationneeded");
+        });
+        peer.addEventListener("signalingstatechange", (_ev) => {
+            consolelog("onsignalingstatechange", peer.signalingState);
+            const senders = peer.getSenders();
+            for (const sender of senders) {
+                if (sender.track != null && sender.track.kind === "video") {
+                    console.log(sender.getParameters().codecs);
+                }
+            }
+            const transceivers = peer.getTransceivers();
+            transceivers.forEach((transceiver) => {
+                if (transceiver.sender.track == null) {
+                    return;
+                }
+                const kind = transceiver.sender.track.kind;
+                const sendCodecs = RTCRtpSender.getCapabilities(kind).codecs;
+                const recvCodecs = RTCRtpReceiver.getCapabilities(kind).codecs;
+                consolelog({ sendCodecs, recvCodecs });
+                // if (kind === "video") {
+                //     const codecPreferences = []
+                //     for (const codec of sendCodecs) {
+                //         if (codec.mimeType === "video/VP8") {
+                //             codecPreferences.push(codec);
+                //         }
+                //     }
+                //     transceiver.setCodecPreferences(codecPreferences);
+                // }
+            });
+        });
+        peer.addEventListener("track", async (ev) => {
+            consolelog("ontrack", ev);
+        });
+    }
+
     async function captureDesktop() {
         const localStream = await navigator.mediaDevices.getDisplayMedia({
             video: {
@@ -9,40 +61,19 @@
         });
         consolelog("make Offer");
         const peer = new RTCPeerConnection({ iceServers: [] });
-        peer.onsignalingstatechange = () => {
-            consolelog("onsignalingstatechange", peer.signalingState);
-        };
-        peer.onicecandidateerror = (evt) => {
-            consolelog("onicecandidateerror", evt);
-        };
-        peer.onsignalingstatechange = () => {
-            consolelog("onsignalingstatechange", peer.signalingState);
-        };
-        peer.oniceconnectionstatechange = () => {
-            consolelog("oniceconnectionstatechange", peer.iceConnectionState);
-        };
-        peer.onicegatheringstatechange = () => {
-            consolelog("onicegatheringstatechange", peer.iceGatheringState);
-        };
-        peer.onconnectionstatechange = () => {
-            consolelog("onconnectionstatechange", peer.connectionState);
-        };
-        peer.ontrack = (event) => {
-            consolelog("ontrack", event);
-        };
-        peer.onremovestream = (event) => {
-            consolelog("onremovestream", event);
-        };
+        addEventListeners(peer);
         consolelog("Adding local stream...");
         peer.addStream(localStream);
+        await new Promise((resolve) => {
+            peer.onnegotiationneeded = () => resolve();
+        });
         const localDescription = await peer.createOffer();
         consolelog("createOffer() succsess in promise");
         await peer.setLocalDescription(localDescription);
         consolelog("setLocalDescription() succsess in promise");
         await new Promise((resolve) => {
-            peer.onicecandidate = (evt) => {
-                consolelog("onicecandidate", evt.candidate);
-                if (evt.candidate != null) {
+            peer.onicecandidate = (ev) => {
+                if (ev.candidate != null) {
                     // Trickle ICE の場合は、ICE candidateを相手に送る
                     // Vanilla ICE の場合には、何もしない
                 } else {
@@ -93,7 +124,6 @@
         consolelog("setRemoteDescription(answer) succsess in promise");
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
-                consolelog("onconnectionstatechange", peer.iceConnectionState);
                 if (peer.connectionState === "disconnected") {
                     resolve();
                 }
@@ -130,36 +160,16 @@
             sdp: remoteSdpText,
         });
         const peer = new RTCPeerConnection({ iceServers: [] });
-        peer.onsignalingstatechange = () => {
-            consolelog("onsignalingstatechange", peer.signalingState);
-        };
-        peer.onicecandidateerror = (evt) => {
-            consolelog("onicecandidateerror", evt);
-        };
-        peer.oniceconnectionstatechange = () => {
-            consolelog("oniceconnectionstatechange", peer.iceConnectionState);
-        };
-        peer.onicegatheringstatechange = () => {
-            consolelog("onicegatheringstatechange", peer.iceGatheringState);
-        };
-        peer.onconnectionstatechange = () => {
-            consolelog("onconnectionstatechange", peer.connectionState);
-        };
+        addEventListeners(peer);
         const video = document.createElement("video");
-        peer.ontrack = (event) => {
-            consolelog("ontrack", event);
-            const remoteStream = event.streams[0];
+        peer.ontrack = (ev) => {
+            const remoteStream = ev.streams[0];
             video.muted = true;
             video.volume = 0;
             video.autoplay = true;
             video.playsinline = true;
             video.controls = false;
             video.srcObject = remoteStream;
-        };
-        peer.onremovestream = (event) => {
-            consolelog("onremovestream", event);
-            video.pause();
-            video.srcObject = null;
         };
         await peer.setRemoteDescription(offerSdp);
         consolelog("setRemoteDescription(offer) succsess in promise");
@@ -172,9 +182,8 @@
         // -- Vanilla ICE の場合には、まだSDPは送らない --
         //sendSdp(peerConnection.localDescription);
         await new Promise((resolve) => {
-            peer.onicecandidate = function (evt) {
-                consolelog("onicecandidate", evt.candidate);
-                if (evt.candidate != null) {
+            peer.onicecandidate = (ev) => {
+                if (ev.candidate != null) {
                     // Trickle ICE の場合は、ICE candidateを相手に送る
                     // Vanilla ICE の場合には、何もしない
                 } else {
@@ -198,7 +207,6 @@
         document.body.appendChild(textarea2);
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
-                consolelog("onconnectionstatechange", peer.iceConnectionState);
                 if (peer.connectionState === "connected") {
                     resolve();
                 }
@@ -209,7 +217,6 @@
         video.play();
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
-                consolelog("onconnectionstatechange", peer.iceConnectionState);
                 if (peer.connectionState === "disconnected") {
                     resolve();
                 }
@@ -231,8 +238,8 @@
     window.onerror = (message, source, lineno, colno, error) => {
         consolelog(message, source, lineno, colno, error);
     };
-    window.addEventListener("unhandledrejection", (evt) => {
-        consolelog(["onUnhandledrejection", evt.reason.stack].join("\n--------\n"));
+    window.addEventListener("unhandledrejection", (ev) => {
+        consolelog(["onUnhandledrejection", ev.reason.stack].join("\n--------\n"));
     });
     document.addEventListener("DOMContentLoaded", (ev) => {
         logarea.style = "display: block; width: 100%; height: 200px;";
