@@ -35,7 +35,7 @@
                 const kind = transceiver.sender.track.kind;
                 const sendCodecs = RTCRtpSender.getCapabilities(kind).codecs;
                 const recvCodecs = RTCRtpReceiver.getCapabilities(kind).codecs;
-                consolelog({ sendCodecs, recvCodecs });
+                consolelog(JSON.stringify({ sendCodecs, recvCodecs }, null, 2));
                 // if (kind === "video") {
                 //     const codecPreferences = []
                 //     for (const codec of sendCodecs) {
@@ -48,7 +48,7 @@
             });
         });
         peer.addEventListener("track", async (ev) => {
-            consolelog("ontrack", ev);
+            consolelog("ontrack", JSON.stringify(ev, null, 2));
         });
     }
 
