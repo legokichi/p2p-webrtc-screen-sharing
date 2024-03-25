@@ -46,9 +46,20 @@
         });
         const textarea = document.createElement("textarea");
         textarea.value = localSdpText;
+        textarea.readonly = true;
+        textarea.onclick = async () => {
+            textarea.focus();
+            textarea.select();
+            await navigator.clipboard.writeText(localSdpText);
+        };
         document.body.appendChild(textarea);
         const textarea2 = document.createElement("textarea");
-        textarea2.value = "paste remote sdp here";
+        textarea2.placeholder = "paste remote sdp here";
+        textarea2.onclick = async () => {
+            textarea2.value = await navigator.clipboard.readText();
+            textarea2.focus();
+            textarea2.select();
+        };
         document.body.appendChild(textarea2);
         const button = document.createElement("button");
         button.appendChild(document.createTextNode("Receive Offer"));
@@ -81,7 +92,12 @@
 
     async function receiveDesktop() {
         const textarea = document.createElement("textarea");
-        textarea.value = "paste remote sdp here";
+        textarea.placeholder = "paste remote sdp here";
+        textarea.onclick = async () => {
+            textarea.value = await navigator.clipboard.readText();
+            textarea.focus();
+            textarea.select();
+        };
         document.body.appendChild(textarea);
         const button = document.createElement("button");
         button.appendChild(document.createTextNode("Receive Offer"));
@@ -156,6 +172,12 @@
         });
         const textarea2 = document.createElement("textarea");
         textarea2.value = localSdpText;
+        textarea2.readonly = true;
+        textarea2.onclick = async () => {
+            textarea2.focus();
+            textarea2.select();
+            await navigator.clipboard.writeText(localSdpText);
+        };
         document.body.appendChild(textarea2);
         await new Promise((resolve) => {
             peer.oniceconnectionstatechange = () => {
@@ -197,6 +219,12 @@
     });
     document.addEventListener("DOMContentLoaded", (ev) => {
         logarea.style = "display: block; width: 100%; height: 200px;";
+        logarea.readonly = true;
+        logarea.onclick = async () => {
+            logarea.focus();
+            logarea.select();
+            await navigator.clipboard.writeText(logarea.value);
+        };
         document.body.appendChild(logarea);
         const button1 = document.createElement("button");
         const button2 = document.createElement("button");
