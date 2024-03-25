@@ -1,44 +1,45 @@
 <script>
+    "use strict";
     async function captureDesktop() {
         const localStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        console.log("make Offer");
+        consolelog("make Offer");
         const peer = new RTCPeerConnection({ iceServers: [] });
         peer.onsignalingstatechange = () => {
-            console.log("onsignalingstatechange", peer.signalingState);
+            consolelog("onsignalingstatechange", peer.signalingState);
         };
         peer.onicecandidateerror = (evt) => {
-            console.error("onicecandidateerror", evt);
+            consolelog("onicecandidateerror", evt);
         };
         peer.onsignalingstatechange = () => {
-            console.log("onsignalingstatechange", peer.signalingState);
+            consolelog("onsignalingstatechange", peer.signalingState);
         };
         peer.oniceconnectionstatechange = () => {
-            console.log("oniceconnectionstatechange", peer.iceConnectionState);
+            consolelog("oniceconnectionstatechange", peer.iceConnectionState);
         };
         peer.onicegatheringstatechange = () => {
-            console.log("onicegatheringstatechange", peer.iceGatheringState);
+            consolelog("onicegatheringstatechange", peer.iceGatheringState);
         };
         peer.onconnectionstatechange = () => {
-            console.log("onconnectionstatechange", peer.connectionState);
+            consolelog("onconnectionstatechange", peer.connectionState);
         };
-        console.log("Adding local stream...");
+        consolelog("Adding local stream...");
         peer.addStream(localStream);
-        const sdp = await peer.createOffer();
-        console.log("createOffer() succsess in promise");
-        await peer.setLocalDescription(sdp);
-        console.log("setLocalDescription() succsess in promise");
+        const localDescription = await peer.createOffer();
+        consolelog("createOffer() succsess in promise");
+        await peer.setLocalDescription(localDescription);
+        consolelog("setLocalDescription() succsess in promise");
         const localSdpText = await new Promise((resolve) => {
             peer.onicecandidate = (evt) => {
                 if (evt.candidate != null) {
-                    console.log("ice event", evt.candidate);
+                    consolelog("ice event", evt.candidate);
                     // Trickle ICE の場合は、ICE candidateを相手に送る
                     // Vanilla ICE の場合には、何もしない
                 } else {
-                    console.log("empty ice event");
+                    consolelog("empty ice event");
                     // Trickle ICE の場合は、何もしない
                     // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
-                    console.log("---sending sdp ---");
-                    console.log(peer.localDescription.sdp);
+                    consolelog("---sending sdp ---");
+                    // consolelog(peer.localDescription.sdp);
                     resolve(peer.localDescription.sdp);
                 }
             };
@@ -54,8 +55,8 @@
         document.body.appendChild(button);
         await new Promise((resolve) => { button.onclick = resolve; });
         const remoteSdpText = textarea2.value;
-        console.log("Received answer text...");
-        console.log(remoteSdpText);
+        consolelog("Received answer text...");
+        consolelog(remoteSdpText);
         document.body.removeChild(button);
         document.body.removeChild(textarea);
         document.body.removeChild(textarea2);
@@ -64,16 +65,16 @@
             sdp: remoteSdpText,
         });
         await peer.setRemoteDescription(answerSdp);
-        console.log("setRemoteDescription(answer) succsess in promise");
+        consolelog("setRemoteDescription(answer) succsess in promise");
         await new Promise((resolve) => {
             peer.oniceconnectionstatechange = () => {
-                console.log("oniceconnectionstatechange", peer.iceConnectionState);
-                if (peer.iceConnectionState === 'disconnected') {
+                consolelog("oniceconnectionstatechange", peer.iceConnectionState);
+                if (peer.iceConnectionState === "disconnected") {
                     resolve();
                 }
             };
         });
-        console.log('Hang up.');
+        consolelog("Hang up.");
         peer.close();
     }
 
@@ -87,8 +88,8 @@
         document.body.appendChild(button);
         await new Promise((resolve) => { button.onclick = resolve; });
         const remoteSdpText = textarea.value;
-        console.log("Received offer text...");
-        console.log(remoteSdpText);
+        consolelog("Received offer text...");
+        // consolelog(remoteSdpText);
         document.body.removeChild(textarea);
         document.body.removeChild(button);
         const offerSdp = new RTCSessionDescription({
@@ -97,23 +98,23 @@
         });
         const peer = new RTCPeerConnection({ iceServers: [] });
         peer.onsignalingstatechange = () => {
-            console.log("onsignalingstatechange", peer.signalingState);
+            consolelog("onsignalingstatechange", peer.signalingState);
         };
         peer.onicecandidateerror = (evt) => {
-            console.error("onicecandidateerror", evt);
+            consolelog("onicecandidateerror", evt);
         };
         peer.oniceconnectionstatechange = () => {
-            console.log("oniceconnectionstatechange", peer.iceConnectionState);
+            consolelog("oniceconnectionstatechange", peer.iceConnectionState);
         };
         peer.onicegatheringstatechange = () => {
-            console.log("onicegatheringstatechange", peer.iceGatheringState);
+            consolelog("onicegatheringstatechange", peer.iceGatheringState);
         };
         peer.onconnectionstatechange = () => {
-            console.log("onconnectionstatechange", peer.connectionState);
+            consolelog("onconnectionstatechange", peer.connectionState);
         };
         const video = document.createElement("video");
         peer.ontrack = (event) => {
-            console.log("ontrack", event);
+            consolelog("ontrack", event);
             const remoteStream = event.streams[0];
             video.muted = true;
             video.volume = 0;
@@ -123,32 +124,32 @@
             video.srcObject = remoteStream;
         };
         peer.onremovestream = (event) => {
-            console.log("onremovestream", event);
+            consolelog("onremovestream", event);
             video.pause();
             video.srcObject = null;
         };
         await peer.setRemoteDescription(offerSdp);
-        console.log("setRemoteDescription(offer) succsess in promise");
-        console.log("sending Answer. Creating remote session description...");
-        const sdp2 = await peer.createAnswer();
-        console.log("createAnswer() succsess in promise");
-        await peer.setLocalDescription(sdp2);
-        console.log("setLocalDescription() succsess in promise");
+        consolelog("setRemoteDescription(offer) succsess in promise");
+        consolelog("sending Answer. Creating remote session description...");
+        const localDescription = await peer.createAnswer();
+        consolelog("createAnswer() succsess in promise");
+        await peer.setLocalDescription(localDescription);
+        consolelog("setLocalDescription() succsess in promise");
         // -- Trickle ICE の場合は、初期SDPを相手に送る -- 
         // -- Vanilla ICE の場合には、まだSDPは送らない --
         //sendSdp(peerConnection.localDescription);
         const localSdpText = await new Promise((resolve) => {
             peer.onicecandidate = function (evt) {
                 if (evt.candidate != null) {
-                    console.log("ice event", evt.candidate);
+                    consolelog("ice event", evt.candidate);
                     // Trickle ICE の場合は、ICE candidateを相手に送る
                     // Vanilla ICE の場合には、何もしない
                 } else {
-                    console.log("empty ice event");
+                    consolelog("empty ice event");
                     // Trickle ICE の場合は、何もしない
                     // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
-                    console.log("---sending sdp ---");
-                    console.log(peer.localDescription.sdp);
+                    consolelog("---sending sdp ---");
+                    // consolelog(peer.localDescription.sdp);
                     resolve(peer.localDescription.sdp);
                 }
             };
@@ -158,7 +159,7 @@
         document.body.appendChild(textarea2);
         await new Promise((resolve) => {
             peer.oniceconnectionstatechange = () => {
-                console.log("oniceconnectionstatechange", peer.iceConnectionState);
+                consolelog("oniceconnectionstatechange", peer.iceConnectionState);
                 if (peer.iceConnectionState === "connected") {
                     resolve();
                 }
@@ -169,20 +170,34 @@
         video.play();
         await new Promise((resolve) => {
             peer.oniceconnectionstatechange = () => {
-                console.log("oniceconnectionstatechange", peer.iceConnectionState);
-                if (peer.iceConnectionState === 'disconnected') {
+                consolelog("oniceconnectionstatechange", peer.iceConnectionState);
+                if (peer.iceConnectionState === "disconnected") {
                     resolve();
                 }
             };
         });
-        console.log('Hang up.');
+        consolelog("Hang up.");
         peer.close();
         video.pause();
         video.srcObject = null;
         document.body.removeChild(video);
     }
 
+
+    const logarea = document.createElement("textarea");
+    function consolelog(...args) {
+        console.log(...args);
+        logarea.appendChild(document.createTextNode(args.join(" ") + "\n"));
+    }
+    window.onerror = (message, source, lineno, colno, error) => {
+        consolelog(message, source, lineno, colno, error);
+    };
+    window.addEventListener("unhandledrejection", (evt) => {
+        consolelog(["onUnhandledrejection", evt.reason.stack].join("\n--------\n"));
+    });
     document.addEventListener("DOMContentLoaded", (ev) => {
+        logarea.style = "display: block; width: 100%; height: 200px;";
+        document.body.appendChild(logarea);
         const button1 = document.createElement("button");
         const button2 = document.createElement("button");
         button1.appendChild(document.createTextNode("captureDesktop"));
