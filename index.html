@@ -1,8 +1,70 @@
 <script>
     "use strict";
+    // for debug
     function addEventListeners(peer) {
         peer.addEventListener("connectionstatechange", (_ev) => {
             consolelog("onconnectionstatechange", peer.connectionState);
+        });
+        peer.addEventListener("datachannel", (ev) => {
+            const {
+                binaryType,
+                bufferedAmount,
+                id,
+                label,
+                maxPacketLifeTime,
+                maxRetransmits,
+                negotiated,
+                ordered,
+                protocol,
+                readyState,
+            } = ev.channel;
+            consolelog("ondatachannel", JSON.stringify({
+                binaryType,
+                bufferedAmount,
+                id,
+                label,
+                maxPacketLifeTime,
+                maxRetransmits,
+                negotiated,
+                ordered,
+                protocol,
+                readyState,
+            }, null, 2));
+            ev.channel.addEventListener("bufferedamountlow", (_ev) => {
+                consolelog("onbufferedamountlow", id, label);
+            });
+            ev.channel.addEventListener("close", (_ev) => {
+                consolelog("onclose", id, label);
+            });
+            ev.channel.addEventListener("closing", (_ev) => {
+                consolelog("onclosing", id, label);
+            });
+            ev.channel.addEventListener("error", (ev) => {
+                const err = ev.error;
+                consolelog("onerror",
+                    err.message,
+                    err.sdpLineNumber,
+                    err.httpRequestStatusCode,
+                    err.sctpCauseCode,
+                    err.receivedAlert,
+                    err.sentAlert,
+                    err.errorDetail,
+                    "    Error in file ",
+                    err.filename,
+                    " at line ",
+                    err.lineNumber,
+                    ", column ",
+                    err.columnNumber,
+                );
+                console.error("onerror", id, label, err);
+            });
+            // ev.channel.addEventListener("message", (ev) => {
+            //     consolelog("onmessage", id, label, ev, ev.data);
+            // });
+            ev.channel.addEventListener("open", (_ev) => {
+                consolelog("onopen", id, label);
+            });
+
         });
         peer.addEventListener("icecandidate", (ev) => {
             consolelog("onicecandidate", JSON.stringify(ev.candidate, null, 2));
@@ -29,20 +91,7 @@
     }
 
     async function captureVideo(target) {
-        const localStream = await (() => {
-            if (target === "camera") {
-                return navigator.mediaDevices.getUserMedia({ video: { frameRate: 15 } });
-            } else if (target === "desktop") {
-                return navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        frameRate: 15,
-                        displaySurface: "monitor",
-                    },
-                });
-            } else {
-                throw new Error("unknown target");
-            }
-        })();
+
         consolelog("make Offer");
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -50,43 +99,60 @@
             ]
         });
         addEventListeners(peer);
-        consolelog("Adding local stream...");
-        peer.addStream(localStream);
+        if (target === "camera" || target === "desktop") {
+            consolelog("Adding local stream...");
+            if (target === "camera") {
+                const localStream = await navigator.mediaDevices.getUserMedia({ video: { frameRate: 15 } });
+                peer.addStream(localStream);
+            } else if (target === "desktop") {
+                const localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        frameRate: 15,
+                        displaySurface: "monitor",
+                    },
+                });
+                peer.addStream(localStream);
+            }
+        }
+        const channel = peer.createDataChannel("text");
         await new Promise((resolve) => {
             peer.onnegotiationneeded = () => resolve();
         });
-        const choosableCodecs = RTCRtpSender.getCapabilities("video").codecs.filter((codec) => codec.mimeType !== "video/red" && codec.mimeType !== "video/rtx" && codec.mimeType !== "video/ulpfec");
-        consolelog("choosableCodecs", JSON.stringify(choosableCodecs, null, 2));
-        if (RTCRtpTransceiver.prototype.setCodecPreferences instanceof Function) {
-            // filter firefox
-            const ul = document.createElement("ul");
-            for (const [i, codec] of choosableCodecs.entries()) {
-                const li = document.createElement("li");
-                const input = document.createElement("input");
-                input.type = "checkbox";
-                input.id = `codec-${i}`;
-                const label = document.createElement("label");
-                label.htmlFor = `codec-${i}`;
-                label.appendChild(document.createTextNode(JSON.stringify(codec)));
-                li.appendChild(input);
-                li.appendChild(label);
-                ul.appendChild(li);
+        if (target === "camera" || target === "desktop") {
+            const choosableCodecs = RTCRtpSender.getCapabilities("video").codecs.filter((codec) => codec.mimeType !== "video/red" && codec.mimeType !== "video/rtx" && codec.mimeType !== "video/ulpfec");
+            consolelog("choosableCodecs", JSON.stringify(choosableCodecs, null, 2));
+            if (RTCRtpTransceiver.prototype.setCodecPreferences instanceof Function) {
+                // filter firefox
+                const ul = document.createElement("ul");
+                for (const [i, codec] of choosableCodecs.entries()) {
+                    const li = document.createElement("li");
+                    const input = document.createElement("input");
+                    input.type = "checkbox";
+                    input.id = `codec-${i}`;
+                    const label = document.createElement("label");
+                    label.htmlFor = `codec-${i}`;
+                    label.appendChild(document.createTextNode(JSON.stringify(codec)));
+                    li.appendChild(input);
+                    li.appendChild(label);
+                    ul.appendChild(li);
+                }
+                document.body.appendChild(ul);
+                const codecButton = document.createElement("button");
+                codecButton.appendChild(document.createTextNode("choose codecs"));
+                document.body.appendChild(codecButton);
+                await new Promise((resolve) => { codecButton.onclick = resolve; });
+                const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
+                document.body.removeChild(ul);
+                document.body.removeChild(codecButton);
+                consolelog("codecPreferences", JSON.stringify(codecPreferences, null, 2));
+                const transceivers = peer.getTransceivers();
+                if (transceivers[0].sender.track.kind !== "video") {
+                    throw new Error("Video track is not found.");
+                }
+                transceivers[0].setCodecPreferences(codecPreferences);
             }
-            document.body.appendChild(ul);
-            const codecButton = document.createElement("button");
-            codecButton.appendChild(document.createTextNode("choose codecs"));
-            document.body.appendChild(codecButton);
-            await new Promise((resolve) => { codecButton.onclick = resolve; });
-            const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
-            document.body.removeChild(ul);
-            document.body.removeChild(codecButton);
-            consolelog("codecPreferences", codecPreferences);
-            const transceivers = peer.getTransceivers();
-            if (transceivers[0].sender.track.kind !== "video") {
-                throw new Error("Video track is not found.");
-            }
-            transceivers[0].setCodecPreferences(codecPreferences);
         }
+        consolelog("createOffer()");
         const localDescription = await peer.createOffer();
         consolelog("createOffer() succsess in promise");
         await peer.setLocalDescription(localDescription);
@@ -154,6 +220,12 @@
         await peer.setRemoteDescription(answerSdp);
         consolelog("setRemoteDescription(answer) succsess in promise");
         await new Promise((resolve) => {
+            channel.onopen = resolve;
+        });
+        const tid = setInterval(() => {
+            channel.send(new Date().toISOString());
+        }, 3000);
+        await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
                 if (peer.connectionState === "disconnected") {
                     resolve();
@@ -161,11 +233,12 @@
             };
         });
         consolelog("Hang up.");
+        clearInterval(tid);
         peer.close();
     }
 
 
-    async function receiveVideo() {
+    async function receiveRtc() {
         const recvCodecs = RTCRtpReceiver.getCapabilities("video").codecs;
         consolelog("recvCodecs", JSON.stringify(recvCodecs, null, 2));
         const textarea = document.createElement("textarea");
@@ -250,6 +323,10 @@
         document.body.removeChild(textarea2);
         document.body.appendChild(video);
         video.play();
+        const channel = peer.createDataChannel("text");
+        await new Promise((resolve) => {
+            channel.onopen = resolve;
+        });
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
                 if (peer.connectionState === "disconnected") {
@@ -281,39 +358,47 @@
     document.addEventListener("DOMContentLoaded", (ev) => {
         logarea.style = "display: block; width: 100%; height: 200px;";
         logarea.readonly = true;
-        // logarea.onclick = async () => {
-        //     logarea.focus();
-        //     logarea.select();
-        //     await navigator.clipboard.writeText(logarea.value);
-        // };
         document.body.appendChild(logarea);
         const button1 = document.createElement("button");
         const button2 = document.createElement("button");
         const button3 = document.createElement("button");
+        const button4 = document.createElement("button");
         button1.appendChild(document.createTextNode("captureCamera"));
         button2.appendChild(document.createTextNode("captureDesktop"));
-        button3.appendChild(document.createTextNode("receiveVideo"));
+        button3.appendChild(document.createTextNode("captureText"));
+        button4.appendChild(document.createTextNode("receiveRtc"));
         button1.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
             document.body.removeChild(button3);
+            document.body.removeChild(button4);
             captureVideo("camera");
         };
         button2.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
             document.body.removeChild(button3);
+            document.body.removeChild(button4);
             captureVideo("desktop");
         };
         button3.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
             document.body.removeChild(button3);
-            receiveVideo();
+            document.body.removeChild(button4);
+            captureVideo("text");
+        };
+        button4.onclick = () => {
+            document.body.removeChild(button1);
+            document.body.removeChild(button2);
+            document.body.removeChild(button3);
+            document.body.removeChild(button4);
+            receiveRtc();
         };
         document.body.appendChild(button1);
         document.body.appendChild(button2);
         document.body.appendChild(button3);
+        document.body.appendChild(button4);
     });
 </script>
 
