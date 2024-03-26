@@ -183,15 +183,17 @@
         const textarea = document.createElement("textarea");
         textarea.value = localSdpText;
         textarea.readonly = true;
-        textarea.onclick = async () => {
-            textarea.focus();
-            textarea.select();
-            await navigator.clipboard.writeText(localSdpText);
-        };
+        if (navigator.clipboard != null && navigator.clipboard.writeText instanceof Function) {
+            textarea.onclick = async () => {
+                textarea.focus();
+                textarea.select();
+                await navigator.clipboard.writeText(localSdpText);
+            };
+        }
         document.body.appendChild(textarea);
         const textarea2 = document.createElement("textarea");
         textarea2.placeholder = "paste remote sdp here";
-        if (navigator.clipboard.readText instanceof Function) {
+        if (navigator.clipboard != null && navigator.clipboard.readText instanceof Function) {
             textarea2.onclick = async () => {
                 textarea2.value = await navigator.clipboard.readText();
                 textarea2.focus();
@@ -235,7 +237,7 @@
         consolelog("recvCodecs", JSON.stringify(recvCodecs, null, 2));
         const textarea = document.createElement("textarea");
         textarea.placeholder = "paste remote sdp here";
-        if (navigator.clipboard.readText instanceof Function) {
+        if (navigator.clipboard != null && navigator.clipboard.readText instanceof Function) {
             textarea.onclick = async () => {
                 textarea.value = await navigator.clipboard.readText();
                 textarea.focus();
@@ -299,11 +301,13 @@
         const textarea2 = document.createElement("textarea");
         textarea2.value = localSdpText;
         textarea2.readonly = true;
-        textarea2.onclick = async () => {
-            textarea2.focus();
-            textarea2.select();
-            await navigator.clipboard.writeText(localSdpText);
-        };
+        if (navigator.clipboard != null && navigator.clipboard.writeText instanceof Function) {
+            textarea2.onclick = async () => {
+                textarea2.focus();
+                textarea2.select();
+                await navigator.clipboard.writeText(localSdpText);
+            };
+        }
         document.body.appendChild(textarea2);
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
@@ -349,43 +353,30 @@
         document.body.appendChild(logarea);
         const button1 = document.createElement("button");
         const button2 = document.createElement("button");
-        const button3 = document.createElement("button");
         const button4 = document.createElement("button");
         button1.appendChild(document.createTextNode("captureCamera"));
         button2.appendChild(document.createTextNode("captureDesktop"));
-        button3.appendChild(document.createTextNode("captureText"));
         button4.appendChild(document.createTextNode("receiveRtc"));
         button1.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
-            document.body.removeChild(button3);
             document.body.removeChild(button4);
             captureVideo("camera");
         };
         button2.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
-            document.body.removeChild(button3);
             document.body.removeChild(button4);
             captureVideo("desktop");
-        };
-        button3.onclick = () => {
-            document.body.removeChild(button1);
-            document.body.removeChild(button2);
-            document.body.removeChild(button3);
-            document.body.removeChild(button4);
-            captureVideo("text");
         };
         button4.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
-            document.body.removeChild(button3);
             document.body.removeChild(button4);
             receiveRtc();
         };
         document.body.appendChild(button1);
         document.body.appendChild(button2);
-        document.body.appendChild(button3);
         document.body.appendChild(button4);
     });
 </script>
