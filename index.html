@@ -9,6 +9,7 @@
         });
         peer.addEventListener("icecandidateerror", (ev) => {
             consolelog("onicecandidateerror", JSON.stringify(ev, null, 2));
+            console.error("onicecandidateerror", ev);
         });
         peer.addEventListener("iceconnectionstatechange", (_ev) => {
             consolelog("oniceconnectionstatechange", peer.iceConnectionState);
@@ -21,71 +22,99 @@
         });
         peer.addEventListener("signalingstatechange", (_ev) => {
             consolelog("onsignalingstatechange", peer.signalingState);
-            const senders = peer.getSenders();
-            for (const sender of senders) {
-                if (sender.track != null && sender.track.kind === "video") {
-                    console.log(sender.getParameters().codecs);
-                }
-            }
-            const transceivers = peer.getTransceivers();
-            transceivers.forEach((transceiver) => {
-                if (transceiver.sender.track == null) {
-                    return;
-                }
-                const kind = transceiver.sender.track.kind;
-                const sendCodecs = RTCRtpSender.getCapabilities(kind).codecs;
-                const recvCodecs = RTCRtpReceiver.getCapabilities(kind).codecs;
-                consolelog(JSON.stringify({ sendCodecs, recvCodecs }, null, 2));
-                // if (kind === "video") {
-                //     const codecPreferences = []
-                //     for (const codec of sendCodecs) {
-                //         if (codec.mimeType === "video/VP8") {
-                //             codecPreferences.push(codec);
-                //         }
-                //     }
-                //     transceiver.setCodecPreferences(codecPreferences);
-                // }
-            });
         });
         peer.addEventListener("track", async (ev) => {
             consolelog("ontrack", JSON.stringify(ev, null, 2));
         });
     }
 
-    async function captureDesktop() {
-        const localStream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-                frameRate: 15,
-                displaySurface: "monitor",
-            },
-        });
+    async function captureVideo(target) {
+        const localStream = await (() => {
+            if (target === "camera") {
+                return navigator.mediaDevices.getUserMedia({ video: { frameRate: 15 } });
+            } else if (target === "desktop") {
+                return navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        frameRate: 15,
+                        displaySurface: "monitor",
+                    },
+                });
+            } else {
+                throw new Error("unknown target");
+            }
+        })();
         consolelog("make Offer");
-        const peer = new RTCPeerConnection({ iceServers: [] });
+        const peer = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        });
         addEventListeners(peer);
         consolelog("Adding local stream...");
         peer.addStream(localStream);
         await new Promise((resolve) => {
             peer.onnegotiationneeded = () => resolve();
         });
+        const choosableCodecs = RTCRtpSender.getCapabilities("video").codecs.filter((codec) => codec.mimeType !== "video/red" && codec.mimeType !== "video/rtx" && codec.mimeType !== "video/ulpfec");
+        consolelog("choosableCodecs", JSON.stringify(choosableCodecs, null, 2));
+        if (RTCRtpTransceiver.prototype.setCodecPreferences instanceof Function) {
+            // filter firefox
+            const ul = document.createElement("ul");
+            for (const [i, codec] of choosableCodecs.entries()) {
+                const li = document.createElement("li");
+                const input = document.createElement("input");
+                input.type = "checkbox";
+                input.id = `codec-${i}`;
+                const label = document.createElement("label");
+                label.htmlFor = `codec-${i}`;
+                label.appendChild(document.createTextNode(JSON.stringify(codec)));
+                li.appendChild(input);
+                li.appendChild(label);
+                ul.appendChild(li);
+            }
+            document.body.appendChild(ul);
+            const codecButton = document.createElement("button");
+            codecButton.appendChild(document.createTextNode("choose codecs"));
+            document.body.appendChild(codecButton);
+            await new Promise((resolve) => { codecButton.onclick = resolve; });
+            const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
+            document.body.removeChild(ul);
+            document.body.removeChild(codecButton);
+            consolelog("codecPreferences", codecPreferences);
+            const transceivers = peer.getTransceivers();
+            if (transceivers[0].sender.track.kind !== "video") {
+                throw new Error("Video track is not found.");
+            }
+            transceivers[0].setCodecPreferences(codecPreferences);
+        }
         const localDescription = await peer.createOffer();
         consolelog("createOffer() succsess in promise");
         await peer.setLocalDescription(localDescription);
         consolelog("setLocalDescription() succsess in promise");
-        await new Promise((resolve) => {
-            peer.onicecandidate = (ev) => {
-                if (ev.candidate != null) {
-                    // Trickle ICE の場合は、ICE candidateを相手に送る
-                    // Vanilla ICE の場合には、何もしない
-                } else {
-                    // Trickle ICE の場合は、何もしない
-                    // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
-                    resolve();
-                }
-            };
-        });
+        await Promise.all([
+            new Promise((resolve) => {
+                peer.onicegatheringstatechange = (ev) => {
+                    if (peer.iceGatheringState === "complete") {
+                        resolve();
+                    }
+                };
+            }),
+            new Promise((resolve) => {
+                peer.onicecandidate = (ev) => {
+                    if (ev.candidate != null) {
+                        // Trickle ICE の場合は、ICE candidateを相手に送る
+                        // Vanilla ICE の場合には、何もしない
+                    } else {
+                        // Trickle ICE の場合は、何もしない
+                        // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
+                        resolve();
+                    }
+                };
+            })
+        ]);
         const localSdpText = peer.localDescription.sdp
         consolelog("---sending sdp ---");
-        // consolelog(localSdpText);
+        consolelog(localSdpText);
         const textarea = document.createElement("textarea");
         textarea.value = localSdpText;
         textarea.readonly = true;
@@ -97,11 +126,13 @@
         document.body.appendChild(textarea);
         const textarea2 = document.createElement("textarea");
         textarea2.placeholder = "paste remote sdp here";
-        textarea2.onclick = async () => {
-            textarea2.value = await navigator.clipboard.readText();
-            textarea2.focus();
-            textarea2.select();
-        };
+        if (navigator.clipboard.readText instanceof Function) {
+            textarea2.onclick = async () => {
+                textarea2.value = await navigator.clipboard.readText();
+                textarea2.focus();
+                textarea2.select();
+            };
+        }
         document.body.appendChild(textarea2);
         const button = document.createElement("button");
         button.appendChild(document.createTextNode("Receive Offer"));
@@ -112,7 +143,7 @@
             remoteSdpText += "\n";
         }
         consolelog("Received answer text...");
-        // consolelog(remoteSdpText);
+        consolelog(remoteSdpText);
         document.body.removeChild(button);
         document.body.removeChild(textarea);
         document.body.removeChild(textarea2);
@@ -134,14 +165,18 @@
     }
 
 
-    async function receiveDesktop() {
+    async function receiveVideo() {
+        const recvCodecs = RTCRtpReceiver.getCapabilities("video").codecs;
+        consolelog("recvCodecs", JSON.stringify(recvCodecs, null, 2));
         const textarea = document.createElement("textarea");
         textarea.placeholder = "paste remote sdp here";
-        textarea.onclick = async () => {
-            textarea.value = await navigator.clipboard.readText();
-            textarea.focus();
-            textarea.select();
-        };
+        if (navigator.clipboard.readText instanceof Function) {
+            textarea.onclick = async () => {
+                textarea.value = await navigator.clipboard.readText();
+                textarea.focus();
+                textarea.select();
+            };
+        }
         document.body.appendChild(textarea);
         const button = document.createElement("button");
         button.appendChild(document.createTextNode("Receive Offer"));
@@ -152,7 +187,7 @@
             remoteSdpText += "\n";
         }
         consolelog("Received offer text...");
-        // consolelog(remoteSdpText);
+        consolelog(remoteSdpText);
         document.body.removeChild(textarea);
         document.body.removeChild(button);
         const offerSdp = new RTCSessionDescription({
@@ -195,7 +230,7 @@
         });
         const localSdpText = peer.localDescription.sdp;
         consolelog("---sending sdp ---");
-        // consolelog(localSdpText);
+        consolelog(localSdpText);
         const textarea2 = document.createElement("textarea");
         textarea2.value = localSdpText;
         textarea2.readonly = true;
@@ -237,9 +272,11 @@
     }
     window.onerror = (message, source, lineno, colno, error) => {
         consolelog(message, source, lineno, colno, error);
+        console.error(error);
     };
     window.addEventListener("unhandledrejection", (ev) => {
-        consolelog(["onUnhandledrejection", ev.reason.stack].join("\n--------\n"));
+        consolelog("Unhandledrejection", ev.reason.code, ev.reason.name, ev.reason.message, ev.reason.stack);
+        console.error(ev);
     });
     document.addEventListener("DOMContentLoaded", (ev) => {
         logarea.style = "display: block; width: 100%; height: 200px;";
@@ -252,20 +289,31 @@
         document.body.appendChild(logarea);
         const button1 = document.createElement("button");
         const button2 = document.createElement("button");
-        button1.appendChild(document.createTextNode("captureDesktop"));
-        button2.appendChild(document.createTextNode("receiveDesktop"));
+        const button3 = document.createElement("button");
+        button1.appendChild(document.createTextNode("captureCamera"));
+        button2.appendChild(document.createTextNode("captureDesktop"));
+        button3.appendChild(document.createTextNode("receiveVideo"));
         button1.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
-            captureDesktop();
+            document.body.removeChild(button3);
+            captureVideo("camera");
         };
         button2.onclick = () => {
             document.body.removeChild(button1);
             document.body.removeChild(button2);
-            receiveDesktop();
+            document.body.removeChild(button3);
+            captureVideo("desktop");
+        };
+        button3.onclick = () => {
+            document.body.removeChild(button1);
+            document.body.removeChild(button2);
+            document.body.removeChild(button3);
+            receiveVideo();
         };
         document.body.appendChild(button1);
         document.body.appendChild(button2);
+        document.body.appendChild(button3);
     });
 </script>
 
