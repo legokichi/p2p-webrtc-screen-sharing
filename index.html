@@ -114,7 +114,6 @@
                 peer.addStream(localStream);
             }
         }
-        const channel = peer.createDataChannel("text");
         await new Promise((resolve) => {
             peer.onnegotiationneeded = () => resolve();
         });
@@ -220,12 +219,6 @@
         await peer.setRemoteDescription(answerSdp);
         consolelog("setRemoteDescription(answer) succsess in promise");
         await new Promise((resolve) => {
-            channel.onopen = resolve;
-        });
-        const tid = setInterval(() => {
-            channel.send(new Date().toISOString());
-        }, 3000);
-        await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
                 if (peer.connectionState === "disconnected") {
                     resolve();
@@ -233,7 +226,6 @@
             };
         });
         consolelog("Hang up.");
-        clearInterval(tid);
         peer.close();
     }
 
@@ -323,10 +315,6 @@
         document.body.removeChild(textarea2);
         document.body.appendChild(video);
         video.play();
-        const channel = peer.createDataChannel("text");
-        await new Promise((resolve) => {
-            channel.onopen = resolve;
-        });
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
                 if (peer.connectionState === "disconnected") {
