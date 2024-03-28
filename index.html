@@ -118,7 +118,7 @@
 
         document.body.removeChild(button1);
         document.body.removeChild(button2);
-        consolelog(target);
+        consolelog("target", target);
         consolelog("make Offer");
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -126,60 +126,56 @@
             ]
         });
         addEventListeners(peer);
-        if (target === "camera" || target === "desktop") {
-            consolelog("Adding local stream...");
-            if (target === "camera") {
-                const localStream = await navigator.mediaDevices.getUserMedia({ video: { frameRate: 15 } });
-                peer.addStream(localStream);
-            } else if (target === "desktop") {
-                const localStream = await navigator.mediaDevices.getDisplayMedia({
+        consolelog("Adding local stream...");
+        const localStream = await (
+            target === "camera" ? navigator.mediaDevices.getUserMedia({ video: { frameRate: 15 } }) :
+                target === "desktop" ? navigator.mediaDevices.getDisplayMedia({
                     video: {
                         frameRate: 15,
                         displaySurface: "monitor",
                     },
-                });
-                peer.addStream(localStream);
-            }
-        }
+                }) :
+                    Promise.reject(new Error("unknown target"))
+        );
+        peer.addStream(localStream);
         await new Promise((resolve) => {
             peer.onnegotiationneeded = () => resolve();
         });
-        if (target === "camera" || target === "desktop") {
-            const choosableCodecs = RTCRtpSender.getCapabilities("video").codecs.filter((codec) => codec.mimeType !== "video/red" && codec.mimeType !== "video/rtx" && codec.mimeType !== "video/ulpfec");
-            consolelog("choosableCodecs", JSON.stringify(choosableCodecs, null, 2));
-            if (RTCRtpTransceiver.prototype.setCodecPreferences instanceof Function) {
-                // filter firefox
-                const ul = document.createElement("ul");
-                for (const [i, codec] of choosableCodecs.entries()) {
-                    const li = document.createElement("li");
-                    const input = document.createElement("input");
-                    input.type = "checkbox";
-                    input.id = `codec-${i}`;
-                    const label = document.createElement("label");
-                    label.htmlFor = `codec-${i}`;
-                    label.appendChild(document.createTextNode(JSON.stringify(codec)));
-                    li.appendChild(input);
-                    li.appendChild(label);
-                    ul.appendChild(li);
-                }
-                document.body.appendChild(ul);
-                const codecButton = document.createElement("button");
-                codecButton.appendChild(document.createTextNode("choose codecs"));
-                document.body.appendChild(codecButton);
-                await new Promise((resolve) => { codecButton.onclick = resolve; });
-
-                // waiting for user selection
-
-                const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
-                document.body.removeChild(ul);
-                document.body.removeChild(codecButton);
-                consolelog("codecPreferences", JSON.stringify(codecPreferences, null, 2));
-                const transceivers = peer.getTransceivers();
-                if (transceivers[0].sender.track.kind !== "video") {
-                    throw new Error("Video track is not found.");
-                }
-                transceivers[0].setCodecPreferences(codecPreferences);
+        const choosableCodecs = RTCRtpSender.getCapabilities("video").codecs
+            .filter((codec) => codec.mimeType !== "video/red" && codec.mimeType !== "video/rtx" && codec.mimeType !== "video/ulpfec");
+        consolelog("choosableCodecs", JSON.stringify(choosableCodecs, null, 2));
+        if (RTCRtpTransceiver.prototype.setCodecPreferences instanceof Function) {
+            // filter firefox
+            const ul = document.createElement("ul");
+            for (const [i, codec] of choosableCodecs.entries()) {
+                const li = document.createElement("li");
+                const input = document.createElement("input");
+                input.type = "checkbox";
+                input.id = `codec-${i}`;
+                const label = document.createElement("label");
+                label.htmlFor = `codec-${i}`;
+                label.appendChild(document.createTextNode(JSON.stringify(codec)));
+                li.appendChild(input);
+                li.appendChild(label);
+                ul.appendChild(li);
             }
+            document.body.appendChild(ul);
+            const codecButton = document.createElement("button");
+            codecButton.appendChild(document.createTextNode("choose codecs"));
+            document.body.appendChild(codecButton);
+            await new Promise((resolve) => { codecButton.onclick = resolve; });
+
+            // waiting for user selection
+
+            const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
+            document.body.removeChild(ul);
+            document.body.removeChild(codecButton);
+            consolelog("codecPreferences", JSON.stringify(codecPreferences, null, 2));
+            const transceivers = peer.getTransceivers();
+            if (transceivers[0].sender.track.kind !== "video") {
+                throw new Error("Video track is not found.");
+            }
+            transceivers[0].setCodecPreferences(codecPreferences);
         }
         consolelog("createOffer()");
         const localDescription = await peer.createOffer();
@@ -210,8 +206,11 @@
         const localSdpText = peer.localDescription.sdp
         consolelog("---sending sdp ---");
         consolelog(localSdpText);
+        consolelog("encoding sdp to base64 and zipping...");
         const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
+        consolelog(zippedBase64URI);
         const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        consolelog("waiting peer action", url);
         const a = document.createElement("a");
         a.href = url;
         a.target = "_blank";
@@ -238,8 +237,8 @@
         // waiting for signalling
 
         const { zip: remoteZippedBase64URI2 } = decodeHashQueryURL(input.value);
+        consolelog(remoteZippedBase64URI2);
         const remoteSdpText = await decodeZippedBase64URI(remoteZippedBase64URI2);
-
         consolelog("Received answer text...");
         consolelog(remoteSdpText);
         document.body.removeChild(a);
@@ -263,6 +262,7 @@
     }
 
     async function receiveRtc(remoteSdpText) {
+        // for debuging
         const recvCodecs = RTCRtpReceiver.getCapabilities("video").codecs;
         consolelog("recvCodecs", JSON.stringify(recvCodecs, null, 2));
         consolelog("Received offer text...");
@@ -308,8 +308,11 @@
         const localSdpText = peer.localDescription.sdp;
         consolelog("---sending sdp ---");
         consolelog(localSdpText);
+        consolelog("encoding sdp to base64 and zipping...");
         const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
+        consolelog(zippedBase64URI);
         const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        consolelog("waiting peer action", url);
         const a = document.createElement("a");
         a.href = url;
         a.target = "_blank";
