@@ -215,6 +215,7 @@
         const a = document.createElement("a");
         a.href = url;
         a.target = "_blank";
+        a.style = "display: block;";
         a.onclick = (e) => e.preventDefault();
         a.appendChild(document.createTextNode("copy this link to share"));
         document.body.appendChild(a);
@@ -351,6 +352,11 @@
     }
     document.addEventListener("DOMContentLoaded", async (ev) => {
         document.body.appendChild(logarea);
+        const a = document.createElement("a");
+        a.href = location.protocol + '//' + location.hostname + (location.port ? ":" + location.port : "") + location.pathname;
+        a.style = "display: block;";
+        a.appendChild(document.createTextNode("reset"));
+        document.body.appendChild(a);
         let zippedBase64URI;
         try {
             const { zip } = decodeHashQueryURL(location.href);
