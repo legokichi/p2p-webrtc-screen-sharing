@@ -1,5 +1,17 @@
 <script>
     "use strict";
+
+    // for debug
+    window.onerror = (message, source, lineno, colno, error) => {
+        consolelog(message, source, lineno, colno, error);
+        console.error(error);
+    };
+    // for debug
+    window.addEventListener("unhandledrejection", (ev) => {
+        consolelog("Unhandledrejection", ev.reason.code, ev.reason.name, ev.reason.message, ev.reason.stack);
+        console.error(ev);
+    });
+
     // for debug
     function addEventListeners(peer) {
         peer.addEventListener("connectionstatechange", (_ev) => {
@@ -90,8 +102,23 @@
         });
     }
 
-    async function captureVideo(target) {
+    async function captureVideo() {
+        const button1 = document.createElement("button");
+        const button2 = document.createElement("button");
+        button1.appendChild(document.createTextNode("captureCamera"));
+        button2.appendChild(document.createTextNode("captureDesktop"));
+        document.body.appendChild(button1);
+        document.body.appendChild(button2);
+        const target = await new Promise((resolve) => {
+            button1.onclick = () => resolve("camera");
+            button2.onclick = () => resolve("desktop");
+        });
 
+        // waiting for user selection
+
+        document.body.removeChild(button1);
+        document.body.removeChild(button2);
+        consolelog(target);
         consolelog("make Offer");
         const peer = new RTCPeerConnection({
             iceServers: [
@@ -140,6 +167,9 @@
                 codecButton.appendChild(document.createTextNode("choose codecs"));
                 document.body.appendChild(codecButton);
                 await new Promise((resolve) => { codecButton.onclick = resolve; });
+
+                // waiting for user selection
+
                 const codecPreferences = choosableCodecs.filter((_, i) => document.getElementById(`codec-${i}`).checked);
                 document.body.removeChild(ul);
                 document.body.removeChild(codecButton);
@@ -180,40 +210,40 @@
         const localSdpText = peer.localDescription.sdp
         consolelog("---sending sdp ---");
         consolelog(localSdpText);
-        const textarea = document.createElement("textarea");
-        textarea.value = localSdpText;
-        textarea.readonly = true;
-        if (navigator.clipboard != null && navigator.clipboard.writeText instanceof Function) {
-            textarea.onclick = async () => {
-                textarea.focus();
-                textarea.select();
-                await navigator.clipboard.writeText(localSdpText);
-            };
-        }
-        document.body.appendChild(textarea);
-        const textarea2 = document.createElement("textarea");
-        textarea2.placeholder = "paste remote sdp here";
+        const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
+        const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.onclick = (e) => e.preventDefault();
+        a.appendChild(document.createTextNode("copy this link to share"));
+        document.body.appendChild(a);
+        const input = document.createElement("input");
+        input.placeholder = "paste remote peer url here";
+        input.type = "url";
         if (navigator.clipboard != null && navigator.clipboard.readText instanceof Function) {
-            textarea2.onclick = async () => {
-                textarea2.value = await navigator.clipboard.readText();
-                textarea2.focus();
-                textarea2.select();
+            input.onclick = async () => {
+                input.value = await navigator.clipboard.readText();
+                input.focus();
+                input.select();
             };
         }
-        document.body.appendChild(textarea2);
+        document.body.appendChild(input);
         const button = document.createElement("button");
         button.appendChild(document.createTextNode("Receive Offer"));
         document.body.appendChild(button);
         await new Promise((resolve) => { button.onclick = resolve; });
-        let remoteSdpText = textarea2.value;
-        if (remoteSdpText.slice(-1) !== "\n") {
-            remoteSdpText += "\n";
-        }
+
+        // waiting for signalling
+
+        const { zip: remoteZippedBase64URI2 } = decodeHashQueryURL(input.value);
+        const remoteSdpText = await decodeZippedBase64URI(remoteZippedBase64URI2);
+
         consolelog("Received answer text...");
         consolelog(remoteSdpText);
+        document.body.removeChild(a);
         document.body.removeChild(button);
-        document.body.removeChild(textarea);
-        document.body.removeChild(textarea2);
+        document.body.removeChild(input);
         const answerSdp = new RTCSessionDescription({
             type: "answer",
             sdp: remoteSdpText,
@@ -231,32 +261,11 @@
         peer.close();
     }
 
-
-    async function receiveRtc() {
+    async function receiveRtc(remoteSdpText) {
         const recvCodecs = RTCRtpReceiver.getCapabilities("video").codecs;
         consolelog("recvCodecs", JSON.stringify(recvCodecs, null, 2));
-        const textarea = document.createElement("textarea");
-        textarea.placeholder = "paste remote sdp here";
-        if (navigator.clipboard != null && navigator.clipboard.readText instanceof Function) {
-            textarea.onclick = async () => {
-                textarea.value = await navigator.clipboard.readText();
-                textarea.focus();
-                textarea.select();
-            };
-        }
-        document.body.appendChild(textarea);
-        const button = document.createElement("button");
-        button.appendChild(document.createTextNode("Receive Offer"));
-        document.body.appendChild(button);
-        await new Promise((resolve) => { button.onclick = resolve; });
-        let remoteSdpText = textarea.value;
-        if (remoteSdpText.slice(-1) !== "\n") {
-            remoteSdpText += "\n";
-        }
         consolelog("Received offer text...");
         consolelog(remoteSdpText);
-        document.body.removeChild(textarea);
-        document.body.removeChild(button);
         const offerSdp = new RTCSessionDescription({
             type: "offer",
             sdp: remoteSdpText,
@@ -298,17 +307,17 @@
         const localSdpText = peer.localDescription.sdp;
         consolelog("---sending sdp ---");
         consolelog(localSdpText);
-        const textarea2 = document.createElement("textarea");
-        textarea2.value = localSdpText;
-        textarea2.readonly = true;
-        if (navigator.clipboard != null && navigator.clipboard.writeText instanceof Function) {
-            textarea2.onclick = async () => {
-                textarea2.focus();
-                textarea2.select();
-                await navigator.clipboard.writeText(localSdpText);
-            };
-        }
-        document.body.appendChild(textarea2);
+        const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
+        const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.onclick = (e) => e.preventDefault();
+        a.appendChild(document.createTextNode("copy this link to share"));
+        document.body.appendChild(a);
+
+        // waiting for signalling
+
         await new Promise((resolve) => {
             peer.onconnectionstatechange = () => {
                 if (peer.connectionState === "connected") {
@@ -316,7 +325,7 @@
                 }
             };
         });
-        document.body.removeChild(textarea2);
+        document.body.removeChild(a);
         document.body.appendChild(video);
         video.play();
         await new Promise((resolve) => {
@@ -333,52 +342,121 @@
         document.body.removeChild(video);
     }
 
-
     const logarea = document.createElement("textarea");
+    logarea.style = "display: block; width: 100%; height: 200px;";
+    logarea.readonly = true;
     function consolelog(...args) {
         console.log(...args);
         logarea.appendChild(document.createTextNode(args.join(" ") + "\n"));
     }
-    window.onerror = (message, source, lineno, colno, error) => {
-        consolelog(message, source, lineno, colno, error);
-        console.error(error);
-    };
-    window.addEventListener("unhandledrejection", (ev) => {
-        consolelog("Unhandledrejection", ev.reason.code, ev.reason.name, ev.reason.message, ev.reason.stack);
-        console.error(ev);
-    });
-    document.addEventListener("DOMContentLoaded", (ev) => {
-        logarea.style = "display: block; width: 100%; height: 200px;";
-        logarea.readonly = true;
+    document.addEventListener("DOMContentLoaded", async (ev) => {
         document.body.appendChild(logarea);
-        const button1 = document.createElement("button");
-        const button2 = document.createElement("button");
-        const button4 = document.createElement("button");
-        button1.appendChild(document.createTextNode("captureCamera"));
-        button2.appendChild(document.createTextNode("captureDesktop"));
-        button4.appendChild(document.createTextNode("receiveRtc"));
-        button1.onclick = () => {
-            document.body.removeChild(button1);
-            document.body.removeChild(button2);
-            document.body.removeChild(button4);
-            captureVideo("camera");
-        };
-        button2.onclick = () => {
-            document.body.removeChild(button1);
-            document.body.removeChild(button2);
-            document.body.removeChild(button4);
-            captureVideo("desktop");
-        };
-        button4.onclick = () => {
-            document.body.removeChild(button1);
-            document.body.removeChild(button2);
-            document.body.removeChild(button4);
-            receiveRtc();
-        };
-        document.body.appendChild(button1);
-        document.body.appendChild(button2);
-        document.body.appendChild(button4);
+        let zippedBase64URI;
+        try {
+            const { zip } = decodeHashQueryURL(location.href);
+            zippedBase64URI = zip;
+        } catch {
+            return captureVideo()
+        }
+        const sdp = await decodeZippedBase64URI(zippedBase64URI);
+        return receiveRtc(sdp);
     });
+
+    function encodeHashQueryURL(dic) {
+        // hash にするとサーバに送信されない
+        const url = location.protocol + '//' + location.hostname + (location.port ? ":" + location.port : "") + location.pathname + "#" + encodeURIQuery(dic);
+        return url;
+    }
+
+    function decodeHashQueryURL(url) {
+        // hash にするとサーバに送信されない
+        const hash = new URL(url).hash.split("#")[1];
+        const obj = decodeURIQuery(hash);
+        return obj;
+    }
+
+    async function encodeZippedBase64URI(text) {
+        const textBlob = convertTextToBlob(text);
+        const zippedBlob = await zip(textBlob);
+        const zippedBase64URI = await encodeBlobToBase64DataURI(zippedBlob);
+        return zippedBase64URI;
+    }
+
+    async function decodeZippedBase64URI(zippedBase64URI) {
+        const zippedBlob = await decodeBase64DataURI(zippedBase64URI);
+        const textBlob = await unzip(zippedBlob);
+        const text = await readBlobAsText(textBlob);
+        return text;
+    }
+
+    function convertTextToBlob(text, type) {
+        return new Blob([text], { type: "text/plain" });
+    }
+
+    async function readBlobAsText(blob) {
+        const reader = new FileReader();
+        reader.readAsText(blob);
+        await new Promise((resolve, reject) => {
+            reader.onloadend = resolve;
+            reader.onerror = reject;
+        });
+        return reader.result;
+    }
+
+    async function encodeBlobToBase64DataURI(blob) {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        await new Promise((resolve, reject) => {
+            reader.onloadend = resolve;
+            reader.onerror = reject;
+        });
+        return reader.result.replace(";base64,", ";charset=utf-8;base64,");
+    }
+
+    async function decodeBase64DataURI(dataURI) {
+        const tmp = dataURI.split(',');
+        const mimeString = tmp[0].split(':')[1].split(';')[0];
+        const byteString = atob(tmp[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        let i, j, ref;
+        for (i = j = 0, ref = byteString.length; (0 <= ref ? j <= ref : j >= ref); i = 0 <= ref ? ++j : --j) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], {
+            type: mimeString
+        });
+    }
+
+    async function zip(blob) {
+        const cs = new CompressionStream("deflate");
+        const strm = blob.stream().pipeThrough(cs);
+        return await new Response(strm).blob();
+    }
+
+    async function unzip(blob) {
+        const ds = new DecompressionStream("deflate");
+        const strm = blob.stream().pipeThrough(ds);
+        return await new Response(strm).blob();
+    }
+
+    function encodeURIQuery(dic) {
+        const results = [];
+        for (const [key, val] of Object.entries(dic)) {
+            results.push(key + "=" + encodeURIComponent(val));
+        }
+        return results.join("&");
+    }
+
+    function decodeURIQuery(query) {
+        const dic = {};
+        const results = query.split("&");
+        for (const ret of results) {
+            const [key, ...val] = ret.split("=");
+            dic[key] = decodeURIComponent(val.join("="));
+        }
+        return dic;
+    }
 </script>
 
 <body>
