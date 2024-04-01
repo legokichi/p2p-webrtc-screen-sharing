@@ -209,7 +209,12 @@
         consolelog("encoding sdp to base64 and zipping...");
         const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
         consolelog(zippedBase64URI);
-        const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        let url = encodeHashQueryURL({ zip: zippedBase64URI });
+        try {
+            url = await shortenURL(url);
+        } catch (err) {
+            consolelog(err);
+        }
         consolelog("waiting peer action", url);
         const a = document.createElement("a");
         a.href = url;
@@ -236,7 +241,13 @@
 
         // waiting for signalling
 
-        const { zip: remoteZippedBase64URI2 } = decodeHashQueryURL(input.value);
+        let url2 = input.value;
+        try {
+            url2 = await expandURL(url2);
+        } catch (err) {
+            consolelog(err);
+        }
+        const { zip: remoteZippedBase64URI2 } = decodeHashQueryURL(url2);
         consolelog(remoteZippedBase64URI2);
         const remoteSdpText = await decodeZippedBase64URI(remoteZippedBase64URI2);
         consolelog("Received answer text...");
@@ -311,7 +322,12 @@
         consolelog("encoding sdp to base64 and zipping...");
         const zippedBase64URI = await encodeZippedBase64URI(localSdpText);
         consolelog(zippedBase64URI);
-        const url = encodeHashQueryURL({ zip: zippedBase64URI });
+        let url = encodeHashQueryURL({ zip: zippedBase64URI });
+        try {
+            url = await shortenURL(url);
+        } catch (err) {
+            consolelog(err);
+        }
         consolelog("waiting peer action", url);
         const a = document.createElement("a");
         a.href = url;
@@ -465,6 +481,38 @@
             dic[key] = decodeURIComponent(val.join("="));
         }
         return dic;
+    }
+
+    async function shortenURL(url) {
+        const query = "long=" + encodeURIComponent(url);
+        const res = await fetch("https://csclub.uwaterloo.ca/~phthakka/1pt-express/addURL?" + query, {
+            method: "POST",
+            mode: "cors",
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!(res.status === 200 || res.status === 201)) {
+            console.error(res);
+            throw new Error(res.status);
+        }
+        const { short } = await res.json();
+        return "https://1pt.co/" + short;
+    }
+
+    async function expandURL(url) {
+        const urlObj = new URL(url);
+        const query = "url=" + decodeURIComponent(urlObj.pathname.split("/").join(""));
+        const res = await fetch("https://csclub.uwaterloo.ca/~phthakka/1pt-express/getURL?" + query, {
+            method: "GET",
+            mode: "cors",
+            headers: { 'Accept': 'application/json' },
+            redirect: "follow",
+        });
+        if (!(res.status === 200 || res.status === 201 || res.status === 301)) {
+            console.error(res);
+            throw new Error(res.status);
+        }
+        const { url: longUrl } = await res.json();
+        return longUrl;
     }
 </script>
 
